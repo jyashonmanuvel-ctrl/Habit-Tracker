@@ -41,6 +41,25 @@ h1, .dq-title, .fq-display {
 
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 
+.sync-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(77,150,255,0.15);
+  border: 1px solid rgba(77,150,255,0.4);
+  color: #F4F0FF;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.sync-btn:hover { background: rgba(77,150,255,0.28); }
+.sync-btn svg { width: 14px; height: 14px; color: #4D96FF; flex-shrink: 0; }
+.sync-btn.synced { background: rgba(107,203,119,0.15); border-color: rgba(107,203,119,0.4); }
+.sync-btn.synced svg { color: #6BCB77; }
+
 .icon-btn {
   display: flex;
   align-items: center;
@@ -288,6 +307,71 @@ thead th.day-head-today {
 
 .status-msg { font-size: 11px; color: #9C90C7; margin-top: 10px; min-height: 14px; }
 .status-msg.error { color: #FF6B6B; }
+/* ---------- Auth modal ---------- */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(10,8,25,0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  width: 320px;
+  max-width: 90vw;
+  background: #1C1640;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 16px;
+  padding: 18px;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.google-btn {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: #fff; color: #1C1640;
+  border: none; border-radius: 8px;
+  padding: 9px; font-size: 13px; font-weight: 600;
+  cursor: pointer; margin-bottom: 12px;
+}
+.google-btn:hover { background: #f1f1f1; }
+.modal-divider { display: flex; align-items: center; gap: 8px; margin: 10px 0; color: #8577B3; font-size: 11px; }
+.modal-divider::before, .modal-divider::after { content: ""; flex: 1; height: 1px; background: rgba(255,255,255,0.12); }
+.modal-input {
+  width: 100%;
+  background: #241C4A;
+  border: 1px solid #3A2E6E;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #F4F0FF;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.modal-btn-row { display: flex; gap: 8px; margin-top: 4px; }
+.modal-btn {
+  flex: 1;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #F4F0FF;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-btn.primary {
+  background: linear-gradient(90deg, #FF6B6B, #FFD93D);
+  color: #1C1640;
+  border: none;
+}
+.link-btn {
+  display: block;
+  margin: 10px auto 0;
+  background: none; border: none;
+  color: #4D96FF;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.auth-error { color: #FF6B6B; font-size: 11px; margin: 8px 0 0; min-height: 14px; }
 .hidden { display: none !important; }
 
 /* ---------- Day strip ---------- */
