@@ -30,6 +30,142 @@ let dragHabitId = null;
 let editingTaskId = null;
 let dragTaskId = null;
 let selectedDay = null;      // day number currently shown in the Tasks panel
+let currentUser = null;
+let cloudSaveTimer = null;
+
+/* ---------- cloud sync (Firebase, optional) ---------- */
+function userDocRef() {
+  if (!currentUser || typeof db === "undefined") return null;
+  return db.collection("users").doc(currentUser.uid);
+}
+
+function queueCloudSave() {
+  if (!currentUser) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(pushToCloud, 800);
+}
+
+async function pushToCloud() {
+  const ref = userDocRef();
+  if (!ref) return;
+  try {
+    const months = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(STORAGE_PREFIX + "month:")) {
+        try { months[key] = JSON.parse(localStorage.getItem(key)); } catch (e) {}
+      }
+    }
+    await ref.set({ habits: state.habits, months, updatedAt: Date.now() }, { merge: false });
+    showStatus("Synced to cloud.");
+  } catch (e) {
+    showStatus("Cloud sync failed — check your connection.", true);
+  }
+}
+
+async function pullFromCloud() {
+  const ref = userDocRef();
+  if (!ref) return;
+  try {
+    const snap = await ref.get();
+    if (snap.exists) {
+      const data = snap.data();
+      if (Array.isArray(data.habits)) {
+        state.habits = data.habits;
+        localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits));
+      }
+      if (data.months) {
+        Object.keys(data.months).forEach(key => {
+          localStorage.setItem(key, JSON.stringify(data.months[key]));
+        });
+      }
+      loadMonth();
+      renderAll();
+      showStatus("Loaded your synced data.");
+    } else {
+      await pushToCloud(); // first sign-in on this account — push local data up
+    }
+  } catch (e) {
+    showStatus("Couldn't load cloud data — check your connection.", true);
+  }
+}
+
+function wireSyncButton() {
+  const btn = document.getElementById("syncBtn");
+  const label = document.getElementById("syncBtnLabel");
+  if (typeof auth === "undefined") {
+    btn.style.display = "none"; // firebase-config.js not set up yet
+    return;
+  }
+
+  const modal = document.getElementById("authModal");
+  const authError = document.getElementById("authError");
+  const emailInput = document.getElementById("authEmail");
+  const passwordInput = document.getElementById("authPassword");
+
+  function openModal() { authError.textContent = ""; modal.classList.remove("hidden"); }
+  function closeModal() { modal.classList.add("hidden"); }
+  function friendlyError(code) {
+    const map = {
+      "auth/invalid-email": "That email address looks invalid.",
+      "auth/missing-password": "Please enter a password.",
+      "auth/weak-password": "Password should be at least 6 characters.",
+      "auth/email-already-in-use": "An account already exists with that email — try Sign In instead.",
+      "auth/invalid-credential": "Incorrect email or password.",
+      "auth/wrong-password": "Incorrect email or password.",
+      "auth/user-not-found": "No account found with that email — try Create Account.",
+      "auth/too-many-requests": "Too many attempts — please wait a bit and try again."
+    };
+    return map[code] || "Something went wrong. Please try again.";
+  }
+
+  btn.addEventListener("click", () => {
+    if (currentUser) auth.signOut();
+    else openModal();
+  });
+  document.getElementById("closeModalBtn").addEventListener("click", closeModal);
+  modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+
+  document.getElementById("googleSignInBtn").addEventListener("click", () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).then(closeModal).catch(e => authError.textContent = friendlyError(e.code));
+  });
+
+  document.getElementById("signInBtn").addEventListener("click", () => {
+    authError.textContent = "";
+    auth.signInWithEmailAndPassword(emailInput.value.trim(), passwordInput.value)
+      .then(closeModal)
+      .catch(e => authError.textContent = friendlyError(e.code));
+  });
+
+  document.getElementById("signUpBtn").addEventListener("click", () => {
+    authError.textContent = "";
+    auth.createUserWithEmailAndPassword(emailInput.value.trim(), passwordInput.value)
+      .then(closeModal)
+      .catch(e => authError.textContent = friendlyError(e.code));
+  });
+
+  document.getElementById("forgotPasswordBtn").addEventListener("click", () => {
+    authError.textContent = "";
+    const email = emailInput.value.trim();
+    if (!email) { authError.textContent = "Enter your email above first, then click this."; return; }
+    auth.sendPasswordResetEmail(email)
+      .then(() => authError.textContent = "Password reset email sent — check your inbox.")
+      .catch(e => authError.textContent = friendlyError(e.code));
+  });
+
+  auth.onAuthStateChanged(user => {
+    currentUser = user;
+    if (user) {
+      btn.classList.add("synced");
+      label.textContent = (user.displayName || user.email || "Signed in") + " · Sync on";
+      pullFromCloud();
+    } else {
+      btn.classList.remove("synced");
+      label.textContent = "Sign in to sync";
+    }
+  });
+}
 
 /* ---------- storage helpers ---------- */
 function monthKey(year, monthIdx) {
@@ -42,7 +178,7 @@ function loadHabits() {
   } catch (e) { return DEFAULT_HABITS.slice(); }
 }
 function saveHabits() {
-  try { localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits)); showStatus(""); }
+  try { localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits)); showStatus(""); queueCloudSave(); }
   catch (e) { showStatus("Couldn't save habits — storage may be full.", true); }
 }
 function loadMonth() {
@@ -62,6 +198,7 @@ function saveMonth() {
       checks: state.checks, dayTasks: state.dayTasks
     }));
     showStatus("");
+    queueCloudSave();
   } catch (e) { showStatus("Couldn't save last change — storage may be full.", true); }
 }
 function showStatus(msg, isError) {
@@ -87,6 +224,7 @@ function init() {
   loadMonth();
   populateControlPanel();
   wireStaticEvents();
+  wireSyncButton();
   renderAll();
 }
 
