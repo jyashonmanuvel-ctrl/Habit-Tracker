@@ -4,6 +4,7 @@ const PALETTE = ["#FF6B6B", "#4ECDC4", "#FFD93D", "#FF6FB5", "#6BCB77", "#4D96FF
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const STORAGE_PREFIX = "habitquest:";
 const HABITS_KEY = STORAGE_PREFIX + "habits";
+const PENDING_KEY = STORAGE_PREFIX + "pendingTasks";
 
 const DEFAULT_HABITS = [
   { id: "h1", name: "Wake up early", emoji: "🌅", color: PALETTE[0] },
@@ -21,14 +22,17 @@ let state = {
   year: today.getFullYear(),
   monthIdx: today.getMonth(),
   habits: [],
-  checks: {},     // { "1": { habitId: true } }
-  dayTasks: {},   // { "1": [{id,name,emoji,completed}] } — each day has its OWN task list
+  checks: {},        // { "1": { habitId: true } }
+  dayTasks: {},       // { "1": [{id,name,emoji,completed}] } — each day has its OWN task list
+  pendingTasks: [],   // [{id,name,emoji,completed}] — one global always-there list, independent of any day
 };
 
 let editingHabitId = null;
 let dragHabitId = null;
 let editingTaskId = null;
 let dragTaskId = null;
+let editingPendingId = null;
+let dragPendingId = null;
 let selectedDay = null;      // day number currently shown in the Tasks panel
 let currentUser = null;
 let cloudSaveTimer = null;
@@ -56,7 +60,7 @@ async function pushToCloud() {
         try { months[key] = JSON.parse(localStorage.getItem(key)); } catch (e) {}
       }
     }
-    await ref.set({ habits: state.habits, months, updatedAt: Date.now() }, { merge: false });
+    await ref.set({ habits: state.habits, pendingTasks: state.pendingTasks, months, updatedAt: Date.now() }, { merge: false });
     showStatus("Synced to cloud.");
   } catch (e) {
     showStatus("Cloud sync failed — check your connection.", true);
@@ -73,6 +77,10 @@ async function pullFromCloud() {
       if (Array.isArray(data.habits)) {
         state.habits = data.habits;
         localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits));
+      }
+      if (Array.isArray(data.pendingTasks)) {
+        state.pendingTasks = data.pendingTasks;
+        localStorage.setItem(PENDING_KEY, JSON.stringify(state.pendingTasks));
       }
       if (data.months) {
         Object.keys(data.months).forEach(key => {
@@ -181,6 +189,16 @@ function saveHabits() {
   try { localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits)); showStatus(""); queueCloudSave(); }
   catch (e) { showStatus("Couldn't save habits — storage may be full.", true); }
 }
+function loadPendingTasks() {
+  try {
+    const raw = localStorage.getItem(PENDING_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function savePendingTasks() {
+  try { localStorage.setItem(PENDING_KEY, JSON.stringify(state.pendingTasks)); showStatus(""); queueCloudSave(); }
+  catch (e) { showStatus("Couldn't save pending tasks — storage may be full.", true); }
+}
 function loadMonth() {
   try {
     const raw = localStorage.getItem(monthKey(state.year, state.monthIdx));
@@ -221,6 +239,7 @@ let dailyChart, weeklyChart, overallChart;
 /* ===================== INIT ===================== */
 function init() {
   state.habits = loadHabits();
+  state.pendingTasks = loadPendingTasks();
   loadMonth();
   populateControlPanel();
   wireStaticEvents();
@@ -269,6 +288,14 @@ function wireStaticEvents() {
   });
   document.getElementById("confirmAddTask").addEventListener("click", addTask);
   document.getElementById("newTaskInput").addEventListener("keydown", e => { if (e.key === "Enter") addTask(); });
+
+  document.getElementById("addPendingBtn").addEventListener("click", () => {
+    const form = document.getElementById("addPendingForm");
+    form.classList.toggle("hidden");
+    if (!form.classList.contains("hidden")) document.getElementById("newPendingInput").focus();
+  });
+  document.getElementById("confirmAddPending").addEventListener("click", addPendingTask);
+  document.getElementById("newPendingInput").addEventListener("keydown", e => { if (e.key === "Enter") addPendingTask(); });
 }
 
 /* ===================== HABIT CRUD ===================== */
@@ -295,10 +322,12 @@ function startEditHabit(id) {
   renderHabitTable();
 }
 
-function commitEditHabit(id, newName) {
+function commitEditHabit(id, newName, newEmoji) {
   const trimmed = newName.trim();
+  const trimmedEmoji = (newEmoji || "").trim();
   const h = state.habits.find(h => h.id === id);
   if (h && trimmed) h.name = trimmed;
+  if (h && trimmedEmoji) h.emoji = trimmedEmoji;
   editingHabitId = null;
   saveHabits();
   renderAll();
@@ -354,10 +383,12 @@ function startEditTask(id) {
   renderTaskPanel();
 }
 
-function commitEditTask(id, newName) {
+function commitEditTask(id, newName, newEmoji) {
   const trimmed = newName.trim();
+  const trimmedEmoji = (newEmoji || "").trim();
   const t = currentDayTaskList().find(t => t.id === id);
   if (t && trimmed) t.name = trimmed;
+  if (t && trimmedEmoji) t.emoji = trimmedEmoji;
   editingTaskId = null;
   saveMonth();
   renderTaskPanel();
@@ -407,7 +438,7 @@ function toggleCheck(habitId, day) {
 
 /* ===================== EXPORT / IMPORT ===================== */
 function exportData() {
-  const data = { habits: state.habits, months: {} };
+  const data = { habits: state.habits, pendingTasks: state.pendingTasks, months: {} };
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (key && key.startsWith(STORAGE_PREFIX + "month:")) {
@@ -436,6 +467,10 @@ function importData(e) {
       if (Array.isArray(data.habits)) {
         state.habits = data.habits;
         localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits));
+      }
+      if (Array.isArray(data.pendingTasks)) {
+        state.pendingTasks = data.pendingTasks;
+        localStorage.setItem(PENDING_KEY, JSON.stringify(state.pendingTasks));
       }
       if (data.months && typeof data.months === "object") {
         Object.keys(data.months).forEach(key => {
@@ -524,7 +559,7 @@ function renderAll() {
   renderDailyChart();
   renderWeeklyChart();
   renderHabitTable();
-  renderAnalysis();
+  renderPendingTasks();
   renderDayStrip();
   renderTaskPanel();
   document.getElementById("dailyTitle").textContent = `Daily Progress (${MONTH_NAMES[state.monthIdx].slice(0,3)})`;
@@ -629,7 +664,8 @@ function renderHabitTable() {
         </span>
         <span class="color-dot" style="background:${h.color}"></span>
         ${isEditing
-          ? `<input type="text" class="habit-name-input" id="editInput-${h.id}" value="${escapeHtml(h.name)}">`
+          ? `<input type="text" class="emoji-edit-input" id="editEmojiInput-${h.id}" value="${escapeHtml(h.emoji)}" maxlength="4">
+             <input type="text" class="habit-name-input" id="editInput-${h.id}" value="${escapeHtml(h.name)}">`
           : `<span class="habit-name-text">${h.emoji} ${escapeHtml(h.name)}</span>`
         }
         <span class="habit-actions">
@@ -647,16 +683,22 @@ function renderHabitTable() {
     nameTd.querySelector('[data-action="delete"]')?.addEventListener("click", () => removeHabit(h.id));
     nameTd.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       const input = document.getElementById(`editInput-${h.id}`);
-      commitEditHabit(h.id, input.value);
+      const emojiInput = document.getElementById(`editEmojiInput-${h.id}`);
+      commitEditHabit(h.id, input.value, emojiInput.value);
     });
     nameTd.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditHabit);
     const editInput = document.getElementById(`editInput-${h.id}`);
+    const editEmojiInput = document.getElementById(`editEmojiInput-${h.id}`);
     if (editInput) {
       editInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditHabit(h.id, editInput.value);
+        if (e.key === "Enter") commitEditHabit(h.id, editInput.value, editEmojiInput.value);
         if (e.key === "Escape") cancelEditHabit();
       });
-      setTimeout(() => editInput.focus(), 0);
+      editEmojiInput.addEventListener("keydown", e => {
+        if (e.key === "Enter") commitEditHabit(h.id, editInput.value, editEmojiInput.value);
+        if (e.key === "Escape") cancelEditHabit();
+      });
+      setTimeout(() => editEmojiInput.focus(), 0);
     }
 
     daysArr.forEach(d => {
@@ -698,18 +740,134 @@ function renderHabitTable() {
   });
 }
 
-function renderAnalysis() {
-  const list = computeHabitAnalysis();
-  const container = document.getElementById("analysisList");
-  container.innerHTML = list.map(h => `
-    <div>
-      <div class="analysis-item-top">
-        <span class="name">${h.emoji} ${escapeHtml(h.name)}</span>
-        <span class="figs">${h.actual}/${h.goal} <b style="color:${h.color}">${h.pct}%</b></span>
-      </div>
-      <div class="bar-track"><div class="bar-fill" style="width:${h.pct}%;background:${h.color}"></div></div>
-    </div>
-  `).join("");
+/* ===================== PENDING TASKS (global list, independent of any day) ===================== */
+function addPendingTask() {
+  const input = document.getElementById("newPendingInput");
+  const name = input.value.trim();
+  if (!name) return;
+  state.pendingTasks.push({ id: "p" + Date.now(), name, emoji: "⭐", completed: false });
+  savePendingTasks();
+  input.value = "";
+  document.getElementById("addPendingForm").classList.add("hidden");
+  renderPendingTasks();
+}
+
+function removePendingTask(id) {
+  state.pendingTasks = state.pendingTasks.filter(p => p.id !== id);
+  savePendingTasks();
+  renderPendingTasks();
+}
+
+function startEditPendingTask(id) {
+  editingPendingId = id;
+  renderPendingTasks();
+}
+
+function commitEditPendingTask(id, newName, newEmoji) {
+  const trimmed = newName.trim();
+  const trimmedEmoji = (newEmoji || "").trim();
+  const p = state.pendingTasks.find(p => p.id === id);
+  if (p && trimmed) p.name = trimmed;
+  if (p && trimmedEmoji) p.emoji = trimmedEmoji;
+  editingPendingId = null;
+  savePendingTasks();
+  renderPendingTasks();
+}
+
+function cancelEditPendingTask() {
+  editingPendingId = null;
+  renderPendingTasks();
+}
+
+function togglePendingComplete(id) {
+  const p = state.pendingTasks.find(p => p.id === id);
+  if (p) p.completed = !p.completed;
+  savePendingTasks();
+  renderPendingTasks();
+}
+
+function reorderPendingTasks(draggedId, targetId) {
+  if (draggedId === targetId) return;
+  const fromIdx = state.pendingTasks.findIndex(p => p.id === draggedId);
+  const toIdx = state.pendingTasks.findIndex(p => p.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = state.pendingTasks.splice(fromIdx, 1);
+  state.pendingTasks.splice(toIdx, 0, moved);
+  savePendingTasks();
+  renderPendingTasks();
+}
+
+function renderPendingTasks() {
+  const container = document.getElementById("pendingList");
+  if (!container) return;
+  container.innerHTML = "";
+
+  state.pendingTasks.forEach(p => {
+    const row = document.createElement("div");
+    row.className = "task-row";
+    row.draggable = true;
+    row.dataset.pendingId = p.id;
+    const checked = !!p.completed;
+    const isEditing = editingPendingId === p.id;
+
+    row.innerHTML = `
+      <span class="task-drag-handle" title="Drag to reorder">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+      </span>
+      <span class="task-checkbox ${checked ? "checked" : ""}" data-role="checkbox">${checked ? "✓" : ""}</span>
+      ${isEditing
+        ? `<input type="text" class="emoji-edit-input" id="pendingEditEmoji-${p.id}" value="${escapeHtml(p.emoji)}" maxlength="4">
+           <input type="text" class="task-name-input" id="pendingEditInput-${p.id}" value="${escapeHtml(p.name)}">`
+        : `<span class="task-name ${checked ? "checked-text" : ""}">${p.emoji} ${escapeHtml(p.name)}</span>`
+      }
+      <span class="task-actions">
+        ${isEditing
+          ? `<button data-action="save" title="Save"><svg viewBox="0 0 24 24" fill="none" stroke="#6BCB77" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+             <button data-action="cancel" title="Cancel"><svg viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`
+          : `<button data-action="edit" title="Edit task"><svg viewBox="0 0 24 24" fill="none" stroke="#4D96FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+             <button data-action="delete" title="Delete task"><svg viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`
+        }
+      </span>`;
+
+    row.querySelector('[data-role="checkbox"]').addEventListener("click", () => togglePendingComplete(p.id));
+    row.querySelector('[data-action="edit"]')?.addEventListener("click", () => startEditPendingTask(p.id));
+    row.querySelector('[data-action="delete"]')?.addEventListener("click", () => removePendingTask(p.id));
+    row.querySelector('[data-action="save"]')?.addEventListener("click", () => {
+      const inp = document.getElementById(`pendingEditInput-${p.id}`);
+      const emojiInp = document.getElementById(`pendingEditEmoji-${p.id}`);
+      commitEditPendingTask(p.id, inp.value, emojiInp.value);
+    });
+    row.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditPendingTask);
+    const editInput = document.getElementById(`pendingEditInput-${p.id}`);
+    const editEmojiInput = document.getElementById(`pendingEditEmoji-${p.id}`);
+    if (editInput) {
+      editInput.addEventListener("keydown", e => {
+        if (e.key === "Enter") commitEditPendingTask(p.id, editInput.value, editEmojiInput.value);
+        if (e.key === "Escape") cancelEditPendingTask();
+      });
+      editEmojiInput.addEventListener("keydown", e => {
+        if (e.key === "Enter") commitEditPendingTask(p.id, editInput.value, editEmojiInput.value);
+        if (e.key === "Escape") cancelEditPendingTask();
+      });
+      setTimeout(() => editEmojiInput.focus(), 0);
+    }
+
+    row.addEventListener("dragstart", () => { dragPendingId = p.id; row.classList.add("dragging"); });
+    row.addEventListener("dragend", () => {
+      row.classList.remove("dragging");
+      document.querySelectorAll("#pendingList .task-row").forEach(r => r.classList.remove("drop-target"));
+    });
+    row.addEventListener("dragover", e => { e.preventDefault(); row.classList.add("drop-target"); });
+    row.addEventListener("dragleave", () => row.classList.remove("drop-target"));
+    row.addEventListener("drop", e => {
+      e.preventDefault();
+      row.classList.remove("drop-target");
+      if (dragPendingId) reorderPendingTasks(dragPendingId, p.id);
+      dragPendingId = null;
+    });
+
+    container.appendChild(row);
+  });
 }
 
 function escapeHtml(str) {
@@ -786,7 +944,8 @@ function renderTaskPanel() {
       </span>
       <span class="task-checkbox ${checked ? "checked" : ""}" data-role="checkbox">${checked ? "✓" : ""}</span>
       ${isEditing
-        ? `<input type="text" class="task-name-input" id="taskEditInput-${t.id}" value="${escapeHtml(t.name)}">`
+        ? `<input type="text" class="emoji-edit-input" id="taskEditEmoji-${t.id}" value="${escapeHtml(t.emoji)}" maxlength="4">
+           <input type="text" class="task-name-input" id="taskEditInput-${t.id}" value="${escapeHtml(t.name)}">`
         : `<span class="task-name ${checked ? "checked-text" : ""}">${t.emoji} ${escapeHtml(t.name)}</span>`
       }
       <span class="task-actions">
@@ -803,16 +962,22 @@ function renderTaskPanel() {
     row.querySelector('[data-action="delete"]')?.addEventListener("click", () => removeTask(t.id));
     row.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       const inp = document.getElementById(`taskEditInput-${t.id}`);
-      commitEditTask(t.id, inp.value);
+      const emojiInp = document.getElementById(`taskEditEmoji-${t.id}`);
+      commitEditTask(t.id, inp.value, emojiInp.value);
     });
     row.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditTask);
     const editInput = document.getElementById(`taskEditInput-${t.id}`);
+    const editEmojiInput = document.getElementById(`taskEditEmoji-${t.id}`);
     if (editInput) {
       editInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditTask(t.id, editInput.value);
+        if (e.key === "Enter") commitEditTask(t.id, editInput.value, editEmojiInput.value);
         if (e.key === "Escape") cancelEditTask();
       });
-      setTimeout(() => editInput.focus(), 0);
+      editEmojiInput.addEventListener("keydown", e => {
+        if (e.key === "Enter") commitEditTask(t.id, editInput.value, editEmojiInput.value);
+        if (e.key === "Escape") cancelEditTask();
+      });
+      setTimeout(() => editEmojiInput.focus(), 0);
     }
 
     row.addEventListener("dragstart", () => { dragTaskId = t.id; row.classList.add("dragging"); });
