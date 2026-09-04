@@ -322,12 +322,10 @@ function startEditHabit(id) {
   renderHabitTable();
 }
 
-function commitEditHabit(id, newName, newEmoji) {
+function commitEditHabit(id, newName) {
   const trimmed = newName.trim();
-  const trimmedEmoji = (newEmoji || "").trim();
   const h = state.habits.find(h => h.id === id);
   if (h && trimmed) h.name = trimmed;
-  if (h && trimmedEmoji) h.emoji = trimmedEmoji;
   editingHabitId = null;
   saveHabits();
   renderAll();
@@ -383,12 +381,10 @@ function startEditTask(id) {
   renderTaskPanel();
 }
 
-function commitEditTask(id, newName, newEmoji) {
+function commitEditTask(id, newName) {
   const trimmed = newName.trim();
-  const trimmedEmoji = (newEmoji || "").trim();
   const t = currentDayTaskList().find(t => t.id === id);
   if (t && trimmed) t.name = trimmed;
-  if (t && trimmedEmoji) t.emoji = trimmedEmoji;
   editingTaskId = null;
   saveMonth();
   renderTaskPanel();
@@ -664,9 +660,8 @@ function renderHabitTable() {
         </span>
         <span class="color-dot" style="background:${h.color}"></span>
         ${isEditing
-          ? `<input type="text" class="emoji-edit-input" id="editEmojiInput-${h.id}" value="${escapeHtml(h.emoji)}" maxlength="4">
-             <input type="text" class="habit-name-input" id="editInput-${h.id}" value="${escapeHtml(h.name)}">`
-          : `<span class="habit-name-text">${formatWithEmoji(h.emoji, h.name)}</span>`
+          ? `<input type="text" class="habit-name-input" id="editInput-${h.id}" value="${escapeHtml(h.name)}">`
+          : `<span class="habit-name-text">${escapeHtml(h.name)}</span>`
         }
         <span class="habit-actions">
           ${isEditing
@@ -683,22 +678,16 @@ function renderHabitTable() {
     nameTd.querySelector('[data-action="delete"]')?.addEventListener("click", () => removeHabit(h.id));
     nameTd.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       const input = document.getElementById(`editInput-${h.id}`);
-      const emojiInput = document.getElementById(`editEmojiInput-${h.id}`);
-      commitEditHabit(h.id, input.value, emojiInput.value);
+      commitEditHabit(h.id, input.value);
     });
     nameTd.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditHabit);
     const editInput = document.getElementById(`editInput-${h.id}`);
-    const editEmojiInput = document.getElementById(`editEmojiInput-${h.id}`);
     if (editInput) {
       editInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditHabit(h.id, editInput.value, editEmojiInput.value);
+        if (e.key === "Enter") commitEditHabit(h.id, editInput.value);
         if (e.key === "Escape") cancelEditHabit();
       });
-      editEmojiInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditHabit(h.id, editInput.value, editEmojiInput.value);
-        if (e.key === "Escape") cancelEditHabit();
-      });
-      setTimeout(() => editEmojiInput.focus(), 0);
+      setTimeout(() => editInput.focus(), 0);
     }
 
     daysArr.forEach(d => {
@@ -763,12 +752,10 @@ function startEditPendingTask(id) {
   renderPendingTasks();
 }
 
-function commitEditPendingTask(id, newName, newEmoji) {
+function commitEditPendingTask(id, newName) {
   const trimmed = newName.trim();
-  const trimmedEmoji = (newEmoji || "").trim();
   const p = state.pendingTasks.find(p => p.id === id);
   if (p && trimmed) p.name = trimmed;
-  if (p && trimmedEmoji) p.emoji = trimmedEmoji;
   editingPendingId = null;
   savePendingTasks();
   renderPendingTasks();
@@ -816,9 +803,8 @@ function renderPendingTasks() {
       </span>
       <span class="task-checkbox ${checked ? "checked" : ""}" data-role="checkbox">${checked ? "✓" : ""}</span>
       ${isEditing
-        ? `<input type="text" class="emoji-edit-input" id="pendingEditEmoji-${p.id}" value="${escapeHtml(p.emoji)}" maxlength="4">
-           <input type="text" class="task-name-input" id="pendingEditInput-${p.id}" value="${escapeHtml(p.name)}">`
-        : `<span class="task-name ${checked ? "checked-text" : ""}">${formatWithEmoji(p.emoji, p.name)}</span>`
+        ? `<input type="text" class="task-name-input" id="pendingEditInput-${p.id}" value="${escapeHtml(p.name)}">`
+        : `<span class="task-name ${checked ? "checked-text" : ""}">${escapeHtml(p.name)}</span>`
       }
       <span class="task-actions">
         ${isEditing
@@ -834,22 +820,16 @@ function renderPendingTasks() {
     row.querySelector('[data-action="delete"]')?.addEventListener("click", () => removePendingTask(p.id));
     row.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       const inp = document.getElementById(`pendingEditInput-${p.id}`);
-      const emojiInp = document.getElementById(`pendingEditEmoji-${p.id}`);
-      commitEditPendingTask(p.id, inp.value, emojiInp.value);
+      commitEditPendingTask(p.id, inp.value);
     });
     row.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditPendingTask);
     const editInput = document.getElementById(`pendingEditInput-${p.id}`);
-    const editEmojiInput = document.getElementById(`pendingEditEmoji-${p.id}`);
     if (editInput) {
       editInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditPendingTask(p.id, editInput.value, editEmojiInput.value);
+        if (e.key === "Enter") commitEditPendingTask(p.id, editInput.value);
         if (e.key === "Escape") cancelEditPendingTask();
       });
-      editEmojiInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditPendingTask(p.id, editInput.value, editEmojiInput.value);
-        if (e.key === "Escape") cancelEditPendingTask();
-      });
-      setTimeout(() => editEmojiInput.focus(), 0);
+      setTimeout(() => editInput.focus(), 0);
     }
 
     row.addEventListener("dragstart", () => { dragPendingId = p.id; row.classList.add("dragging"); });
@@ -874,10 +854,6 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
-}
-
-function formatWithEmoji(emoji, name) {
-  return emoji ? `${emoji} ${escapeHtml(name)}` : escapeHtml(name);
 }
 
 /* ===================== DAY STRIP + TASK PANEL ===================== */
@@ -948,9 +924,8 @@ function renderTaskPanel() {
       </span>
       <span class="task-checkbox ${checked ? "checked" : ""}" data-role="checkbox">${checked ? "✓" : ""}</span>
       ${isEditing
-        ? `<input type="text" class="emoji-edit-input" id="taskEditEmoji-${t.id}" value="${escapeHtml(t.emoji)}" maxlength="4">
-           <input type="text" class="task-name-input" id="taskEditInput-${t.id}" value="${escapeHtml(t.name)}">`
-        : `<span class="task-name ${checked ? "checked-text" : ""}">${formatWithEmoji(t.emoji, t.name)}</span>`
+        ? `<input type="text" class="task-name-input" id="taskEditInput-${t.id}" value="${escapeHtml(t.name)}">`
+        : `<span class="task-name ${checked ? "checked-text" : ""}">${escapeHtml(t.name)}</span>`
       }
       <span class="task-actions">
         ${isEditing
@@ -966,22 +941,16 @@ function renderTaskPanel() {
     row.querySelector('[data-action="delete"]')?.addEventListener("click", () => removeTask(t.id));
     row.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       const inp = document.getElementById(`taskEditInput-${t.id}`);
-      const emojiInp = document.getElementById(`taskEditEmoji-${t.id}`);
-      commitEditTask(t.id, inp.value, emojiInp.value);
+      commitEditTask(t.id, inp.value);
     });
     row.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditTask);
     const editInput = document.getElementById(`taskEditInput-${t.id}`);
-    const editEmojiInput = document.getElementById(`taskEditEmoji-${t.id}`);
     if (editInput) {
       editInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditTask(t.id, editInput.value, editEmojiInput.value);
+        if (e.key === "Enter") commitEditTask(t.id, editInput.value);
         if (e.key === "Escape") cancelEditTask();
       });
-      editEmojiInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditTask(t.id, editInput.value, editEmojiInput.value);
-        if (e.key === "Escape") cancelEditTask();
-      });
-      setTimeout(() => editEmojiInput.focus(), 0);
+      setTimeout(() => editInput.focus(), 0);
     }
 
     row.addEventListener("dragstart", () => { dragTaskId = t.id; row.classList.add("dragging"); });
