@@ -268,17 +268,6 @@ thead th.day-head-today {
   padding: 1px 4px;
   width: 100px;
 }
-.emoji-edit-input {
-  background: #241C4A;
-  border: 1px solid #FFD93D;
-  border-radius: 5px;
-  color: #F4F0FF;
-  font-size: 12px;
-  padding: 1px 2px;
-  width: 30px;
-  text-align: center;
-  flex-shrink: 0;
-}
 
 .habit-actions { display: flex; gap: 3px; margin-left: 2px; }
 .habit-actions button {
