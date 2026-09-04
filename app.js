@@ -304,7 +304,7 @@ function addHabit() {
   const name = input.value.trim();
   if (!name) return;
   const color = PALETTE[state.habits.length % PALETTE.length];
-  state.habits.push({ id: "h" + Date.now(), name, emoji: "⭐", color });
+  state.habits.push({ id: "h" + Date.now(), name, emoji: "", color });
   saveHabits();
   input.value = "";
   document.getElementById("addHabitForm").classList.add("hidden");
@@ -362,7 +362,7 @@ function addTask() {
   const input = document.getElementById("newTaskInput");
   const name = input.value.trim();
   if (!name) return;
-  currentDayTaskList().push({ id: "t" + Date.now(), name, emoji: "⭐", completed: false });
+  currentDayTaskList().push({ id: "t" + Date.now(), name, emoji: "", completed: false });
   saveMonth();
   input.value = "";
   document.getElementById("addTaskForm").classList.add("hidden");
@@ -666,7 +666,7 @@ function renderHabitTable() {
         ${isEditing
           ? `<input type="text" class="emoji-edit-input" id="editEmojiInput-${h.id}" value="${escapeHtml(h.emoji)}" maxlength="4">
              <input type="text" class="habit-name-input" id="editInput-${h.id}" value="${escapeHtml(h.name)}">`
-          : `<span class="habit-name-text">${h.emoji} ${escapeHtml(h.name)}</span>`
+          : `<span class="habit-name-text">${formatWithEmoji(h.emoji, h.name)}</span>`
         }
         <span class="habit-actions">
           ${isEditing
@@ -745,7 +745,7 @@ function addPendingTask() {
   const input = document.getElementById("newPendingInput");
   const name = input.value.trim();
   if (!name) return;
-  state.pendingTasks.push({ id: "p" + Date.now(), name, emoji: "⭐", completed: false });
+  state.pendingTasks.push({ id: "p" + Date.now(), name, emoji: "", completed: false });
   savePendingTasks();
   input.value = "";
   document.getElementById("addPendingForm").classList.add("hidden");
@@ -818,7 +818,7 @@ function renderPendingTasks() {
       ${isEditing
         ? `<input type="text" class="emoji-edit-input" id="pendingEditEmoji-${p.id}" value="${escapeHtml(p.emoji)}" maxlength="4">
            <input type="text" class="task-name-input" id="pendingEditInput-${p.id}" value="${escapeHtml(p.name)}">`
-        : `<span class="task-name ${checked ? "checked-text" : ""}">${p.emoji} ${escapeHtml(p.name)}</span>`
+        : `<span class="task-name ${checked ? "checked-text" : ""}">${formatWithEmoji(p.emoji, p.name)}</span>`
       }
       <span class="task-actions">
         ${isEditing
@@ -874,6 +874,10 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+function formatWithEmoji(emoji, name) {
+  return emoji ? `${emoji} ${escapeHtml(name)}` : escapeHtml(name);
 }
 
 /* ===================== DAY STRIP + TASK PANEL ===================== */
@@ -946,7 +950,7 @@ function renderTaskPanel() {
       ${isEditing
         ? `<input type="text" class="emoji-edit-input" id="taskEditEmoji-${t.id}" value="${escapeHtml(t.emoji)}" maxlength="4">
            <input type="text" class="task-name-input" id="taskEditInput-${t.id}" value="${escapeHtml(t.name)}">`
-        : `<span class="task-name ${checked ? "checked-text" : ""}">${t.emoji} ${escapeHtml(t.name)}</span>`
+        : `<span class="task-name ${checked ? "checked-text" : ""}">${formatWithEmoji(t.emoji, t.name)}</span>`
       }
       <span class="task-actions">
         ${isEditing
