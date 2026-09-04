@@ -97,10 +97,20 @@
       </div>
     </section>
 
-    <!-- Analysis -->
+    <!-- Pending Tasks (global, independent of any day) -->
     <section class="dq-card" style="grid-area:analysis">
-      <p class="dq-title">Analysis</p>
-      <div id="analysisList" class="analysis-list"></div>
+      <div class="row-between">
+        <p class="dq-title" style="margin:0">Pending Tasks</p>
+        <button id="addPendingBtn" class="pill-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Task
+        </button>
+      </div>
+      <div id="addPendingForm" class="add-form hidden">
+        <input id="newPendingInput" type="text" placeholder="New task name" maxlength="40">
+        <button id="confirmAddPending">Add</button>
+      </div>
+      <div id="pendingList" class="task-list" style="max-height:320px"></div>
     </section>
 
     <!-- Days strip -->
