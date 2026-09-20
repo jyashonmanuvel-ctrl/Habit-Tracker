@@ -275,7 +275,8 @@ function wireStaticEvents() {
     if (!form.classList.contains("hidden")) document.getElementById("newHabitInput").focus();
   });
   document.getElementById("confirmAddHabit").addEventListener("click", addHabit);
-  document.getElementById("newHabitInput").addEventListener("keydown", e => { if (e.key === "Enter") addHabit(); });
+  document.getElementById("newHabitInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addHabit(); } });
+  document.getElementById("newHabitInput").addEventListener("input", e => autoGrow(e.target));
 
   document.getElementById("exportBtn").addEventListener("click", exportData);
   document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
@@ -287,7 +288,8 @@ function wireStaticEvents() {
     if (!form.classList.contains("hidden")) document.getElementById("newTaskInput").focus();
   });
   document.getElementById("confirmAddTask").addEventListener("click", addTask);
-  document.getElementById("newTaskInput").addEventListener("keydown", e => { if (e.key === "Enter") addTask(); });
+  document.getElementById("newTaskInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addTask(); } });
+  document.getElementById("newTaskInput").addEventListener("input", e => autoGrow(e.target));
 
   document.getElementById("addPendingBtn").addEventListener("click", () => {
     const form = document.getElementById("addPendingForm");
@@ -295,7 +297,8 @@ function wireStaticEvents() {
     if (!form.classList.contains("hidden")) document.getElementById("newPendingInput").focus();
   });
   document.getElementById("confirmAddPending").addEventListener("click", addPendingTask);
-  document.getElementById("newPendingInput").addEventListener("keydown", e => { if (e.key === "Enter") addPendingTask(); });
+  document.getElementById("newPendingInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addPendingTask(); } });
+  document.getElementById("newPendingInput").addEventListener("input", e => autoGrow(e.target));
 }
 
 /* ===================== HABIT CRUD ===================== */
@@ -307,6 +310,7 @@ function addHabit() {
   state.habits.push({ id: "h" + Date.now(), name, emoji: "", color });
   saveHabits();
   input.value = "";
+  input.style.height = "auto";
   document.getElementById("addHabitForm").classList.add("hidden");
   renderAll();
 }
@@ -363,6 +367,7 @@ function addTask() {
   currentDayTaskList().push({ id: "t" + Date.now(), name, emoji: "", completed: false });
   saveMonth();
   input.value = "";
+  input.style.height = "auto";
   document.getElementById("addTaskForm").classList.add("hidden");
   renderDayStrip();
   renderTaskPanel();
@@ -660,7 +665,7 @@ function renderHabitTable() {
         </span>
         <span class="color-dot" style="background:${h.color}"></span>
         ${isEditing
-          ? `<input type="text" class="habit-name-input" id="editInput-${h.id}" value="${escapeHtml(h.name)}">`
+          ? `<textarea class="habit-name-input grow-input" id="editInput-${h.id}" rows="1">${escapeHtml(h.name)}</textarea>`
           : `<span class="habit-name-text">${escapeHtml(h.name)}</span>`
         }
         <span class="habit-actions">
@@ -684,10 +689,12 @@ function renderHabitTable() {
     const editInput = document.getElementById(`editInput-${h.id}`);
     if (editInput) {
       editInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditHabit(h.id, editInput.value);
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEditHabit(h.id, editInput.value); }
         if (e.key === "Escape") cancelEditHabit();
       });
-      setTimeout(() => editInput.focus(), 0);
+      editInput.addEventListener("input", () => autoGrow(editInput));
+      autoGrow(editInput);
+      setTimeout(() => { editInput.focus(); editInput.setSelectionRange(editInput.value.length, editInput.value.length); }, 0);
     }
 
     daysArr.forEach(d => {
@@ -737,6 +744,7 @@ function addPendingTask() {
   state.pendingTasks.push({ id: "p" + Date.now(), name, emoji: "", completed: false });
   savePendingTasks();
   input.value = "";
+  input.style.height = "auto";
   document.getElementById("addPendingForm").classList.add("hidden");
   renderPendingTasks();
 }
@@ -803,7 +811,7 @@ function renderPendingTasks() {
       </span>
       <span class="task-checkbox ${checked ? "checked" : ""}" data-role="checkbox">${checked ? "✓" : ""}</span>
       ${isEditing
-        ? `<input type="text" class="task-name-input" id="pendingEditInput-${p.id}" value="${escapeHtml(p.name)}">`
+        ? `<textarea class="task-name-input grow-input" id="pendingEditInput-${p.id}" rows="1">${escapeHtml(p.name)}</textarea>`
         : `<span class="task-name ${checked ? "checked-text" : ""}">${escapeHtml(p.name)}</span>`
       }
       <span class="task-actions">
@@ -826,10 +834,12 @@ function renderPendingTasks() {
     const editInput = document.getElementById(`pendingEditInput-${p.id}`);
     if (editInput) {
       editInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditPendingTask(p.id, editInput.value);
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEditPendingTask(p.id, editInput.value); }
         if (e.key === "Escape") cancelEditPendingTask();
       });
-      setTimeout(() => editInput.focus(), 0);
+      editInput.addEventListener("input", () => autoGrow(editInput));
+      autoGrow(editInput);
+      setTimeout(() => { editInput.focus(); editInput.setSelectionRange(editInput.value.length, editInput.value.length); }, 0);
     }
 
     row.addEventListener("dragstart", () => { dragPendingId = p.id; row.classList.add("dragging"); });
@@ -854,6 +864,11 @@ function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+
+function autoGrow(el) {
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
 }
 
 /* ===================== DAY STRIP + TASK PANEL ===================== */
@@ -924,7 +939,7 @@ function renderTaskPanel() {
       </span>
       <span class="task-checkbox ${checked ? "checked" : ""}" data-role="checkbox">${checked ? "✓" : ""}</span>
       ${isEditing
-        ? `<input type="text" class="task-name-input" id="taskEditInput-${t.id}" value="${escapeHtml(t.name)}">`
+        ? `<textarea class="task-name-input grow-input" id="taskEditInput-${t.id}" rows="1">${escapeHtml(t.name)}</textarea>`
         : `<span class="task-name ${checked ? "checked-text" : ""}">${escapeHtml(t.name)}</span>`
       }
       <span class="task-actions">
@@ -947,10 +962,12 @@ function renderTaskPanel() {
     const editInput = document.getElementById(`taskEditInput-${t.id}`);
     if (editInput) {
       editInput.addEventListener("keydown", e => {
-        if (e.key === "Enter") commitEditTask(t.id, editInput.value);
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEditTask(t.id, editInput.value); }
         if (e.key === "Escape") cancelEditTask();
       });
-      setTimeout(() => editInput.focus(), 0);
+      editInput.addEventListener("input", () => autoGrow(editInput));
+      autoGrow(editInput);
+      setTimeout(() => { editInput.focus(); editInput.setSelectionRange(editInput.value.length, editInput.value.length); }, 0);
     }
 
     row.addEventListener("dragstart", () => { dragTaskId = t.id; row.classList.add("dragging"); });
