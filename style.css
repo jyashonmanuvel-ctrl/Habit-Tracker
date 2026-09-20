@@ -179,7 +179,8 @@ h1, .dq-title, .fq-display {
 
 .add-form { display: flex; gap: 8px; margin-bottom: 10px; }
 .add-form.hidden { display: none; }
-.add-form input {
+.add-form input,
+.add-form textarea.grow-input {
   flex: 1;
   background: #241C4A;
   border: 1px solid #3A2E6E;
@@ -187,6 +188,16 @@ h1, .dq-title, .fq-display {
   padding: 6px 10px;
   color: #F4F0FF;
   font-size: 12px;
+}
+.add-form textarea.grow-input {
+  font-family: inherit;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.4;
+  min-height: 30px;
 }
 .add-form button {
   background: #6BCB77;
@@ -233,7 +244,6 @@ thead th.day-head-today {
   position: sticky;
   left: 0;
   background: #201A47;
-  white-space: nowrap;
 }
 .habit-row:hover { background: rgba(255,255,255,0.03); }
 .habit-row.dragging { opacity: 0.4; }
@@ -241,7 +251,7 @@ thead th.day-head-today {
 
 .habit-name-cell {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 5px;
 }
 .drag-handle {
@@ -252,13 +262,21 @@ thead th.day-head-today {
   opacity: 0;
   transition: opacity 0.12s ease;
   color: #8577B3;
+  margin-top: 2px;
 }
 .habit-row:hover .drag-handle { opacity: 1; }
 .drag-handle svg { width: 12px; height: 12px; }
 
-.color-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.color-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
 
-.habit-name-text { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+.habit-name-text {
+  width: 130px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.35;
+  padding: 1px 0;
+}
 .habit-name-input {
   background: #241C4A;
   border: 1px solid #FFD93D;
@@ -267,6 +285,16 @@ thead th.day-head-today {
   font-size: 11px;
   padding: 1px 4px;
   width: 100px;
+}
+.habit-name-input,
+.task-name-input {
+  font-family: inherit;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.4;
 }
 
 .habit-actions { display: flex; gap: 3px; margin-left: 2px; }
@@ -431,7 +459,7 @@ thead th.day-head-today {
 .task-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; padding-right: 2px; }
 .task-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   background: rgba(255,255,255,0.035);
   border: 1px solid rgba(255,255,255,0.07);
@@ -449,9 +477,21 @@ thead th.day-head-today {
   cursor: pointer;
   flex-shrink: 0;
   font-size: 10px;
+  margin-top: 1px;
 }
 .task-checkbox.checked { background: #6BCB77; border-color: #6BCB77; color: #0F2B12; }
-.task-name { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+.task-name {
+  flex: 1;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding-top: 1px;
+}
 .task-name.checked-text { text-decoration: line-through; color: #8577B3; }
 .task-name-input {
   flex: 1;
@@ -462,11 +502,11 @@ thead th.day-head-today {
   font-size: 12px;
   padding: 2px 6px;
 }
-.task-actions { display: flex; gap: 3px; flex-shrink: 0; }
+.task-actions { display: flex; gap: 3px; flex-shrink: 0; margin-top: 1px; }
 .task-actions button { background: none; border: none; cursor: pointer; opacity: 0.55; padding: 0; display: flex; }
 .task-actions button:hover { opacity: 1; }
 .task-actions svg { width: 13px; height: 13px; }
-.task-drag-handle { width: 12px; display: flex; align-items: center; cursor: grab; opacity: 0.4; color: #8577B3; flex-shrink: 0; }
+.task-drag-handle { width: 12px; display: flex; align-items: center; cursor: grab; opacity: 0.4; color: #8577B3; flex-shrink: 0; margin-top: 3px; }
 .task-drag-handle svg { width: 12px; height: 12px; }
 
 .task-footer { margin-top: 10px; }
