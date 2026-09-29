@@ -3,28 +3,19 @@
 const PALETTE = ["#FF6B6B", "#4ECDC4", "#FFD93D", "#FF6FB5", "#6BCB77", "#4D96FF", "#B085F5", "#FF9F45", "#5CE1E6", "#F76E11"];
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const STORAGE_PREFIX = "habitquest:";
-const HABITS_KEY = STORAGE_PREFIX + "habits";
+const HABITS_KEY = STORAGE_PREFIX + "habits"; // legacy global key — read once for migration only, never written again
 const PENDING_KEY = STORAGE_PREFIX + "pendingTasks";
-
-const DEFAULT_HABITS = [
-  { id: "h1", name: "Wake up early", emoji: "🌅", color: PALETTE[0] },
-  { id: "h2", name: "Gym", emoji: "🏋️", color: PALETTE[1] },
-  { id: "h3", name: "Reading", emoji: "📖", color: PALETTE[2] },
-  { id: "h4", name: "Hydrate", emoji: "💧", color: PALETTE[3] },
-  { id: "h5", name: "Healthy Meal", emoji: "🥗", color: PALETTE[4] },
-  { id: "h6", name: "Journal", emoji: "📝", color: PALETTE[5] },
-  { id: "h7", name: "No Social Media", emoji: "📵", color: PALETTE[6] },
-];
 
 /* ---------- state ---------- */
 const today = new Date();
 let state = {
   year: today.getFullYear(),
   monthIdx: today.getMonth(),
-  habits: [],
-  checks: {},        // { "1": { habitId: true } }
-  dayTasks: {},       // { "1": [{id,name,emoji,completed}] } — each day has its OWN task list
-  pendingTasks: [],   // [{id,name,emoji,completed}] — one global always-there list, independent of any day
+  habits: [],          // now scoped to the CURRENTLY VIEWED month only (see loadMonth)
+  checks: {},          // { "1": { habitId: true } }
+  dayTasks: {},        // { "1": [{id,name,emoji,completed}] } — each day has its OWN task list
+  monthGoals: [],       // [{id,name,completed}] — scoped to the currently viewed month only
+  pendingTasks: [],    // [{id,name,emoji,completed}] — one global always-there list, independent of any day/month
 };
 
 let editingHabitId = null;
@@ -33,7 +24,10 @@ let editingTaskId = null;
 let dragTaskId = null;
 let editingPendingId = null;
 let dragPendingId = null;
-let selectedDay = null;      // day number currently shown in the Tasks panel
+let editingGoalId = null;
+let dragGoalId = null;
+let selectedDay = null;         // day number currently shown in the Tasks panel
+let pendingDuplicate = null;    // {habits, label} when an earlier month has habits to offer duplicating, else null
 let currentUser = null;
 let cloudSaveTimer = null;
 
@@ -60,7 +54,7 @@ async function pushToCloud() {
         try { months[key] = JSON.parse(localStorage.getItem(key)); } catch (e) {}
       }
     }
-    await ref.set({ habits: state.habits, pendingTasks: state.pendingTasks, months, updatedAt: Date.now() }, { merge: false });
+    await ref.set({ pendingTasks: state.pendingTasks, months, updatedAt: Date.now() }, { merge: false });
     showStatus("Synced to cloud.");
   } catch (e) {
     showStatus("Cloud sync failed — check your connection.", true);
@@ -74,10 +68,6 @@ async function pullFromCloud() {
     const snap = await ref.get();
     if (snap.exists) {
       const data = snap.data();
-      if (Array.isArray(data.habits)) {
-        state.habits = data.habits;
-        localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits));
-      }
       if (Array.isArray(data.pendingTasks)) {
         state.pendingTasks = data.pendingTasks;
         localStorage.setItem(PENDING_KEY, JSON.stringify(state.pendingTasks));
@@ -179,16 +169,8 @@ function wireSyncButton() {
 function monthKey(year, monthIdx) {
   return `${STORAGE_PREFIX}month:${year}-${String(monthIdx + 1).padStart(2, "0")}`;
 }
-function loadHabits() {
-  try {
-    const raw = localStorage.getItem(HABITS_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_HABITS.slice();
-  } catch (e) { return DEFAULT_HABITS.slice(); }
-}
-function saveHabits() {
-  try { localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits)); showStatus(""); queueCloudSave(); }
-  catch (e) { showStatus("Couldn't save habits — storage may be full.", true); }
-}
+function monthOrdinal(year, monthIdx) { return year * 12 + monthIdx; }
+
 function loadPendingTasks() {
   try {
     const raw = localStorage.getItem(PENDING_KEY);
@@ -199,25 +181,99 @@ function savePendingTasks() {
   try { localStorage.setItem(PENDING_KEY, JSON.stringify(state.pendingTasks)); showStatus(""); queueCloudSave(); }
   catch (e) { showStatus("Couldn't save pending tasks — storage may be full.", true); }
 }
+
+// Scans every saved month for the closest EARLIER month that already has a non-empty habit list.
+function findMostRecentPriorMonthWithHabits(year, monthIdx) {
+  const targetOrdinal = monthOrdinal(year, monthIdx);
+  let best = null, bestOrdinal = -Infinity;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(STORAGE_PREFIX + "month:")) continue;
+    const match = key.match(/month:(\d+)-(\d+)$/);
+    if (!match) continue;
+    const y = Number(match[1]), m = Number(match[2]) - 1;
+    const ordinal = monthOrdinal(y, m);
+    if (ordinal >= targetOrdinal) continue; // only look at months strictly before this one
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key));
+      if (Array.isArray(parsed.habits) && parsed.habits.length > 0 && ordinal > bestOrdinal) {
+        bestOrdinal = ordinal;
+        best = { habits: parsed.habits, label: `${MONTH_NAMES[m]} ${y}` };
+      }
+    } catch (e) { /* skip unreadable entry */ }
+  }
+  return best;
+}
+
+// True if ANY month key ever saved already has a habits field (even an empty array) — used once, only
+// to decide whether this is the very first load after the update (so we can migrate the old global list).
+function anyMonthEverInitialized() {
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(STORAGE_PREFIX + "month:")) continue;
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key));
+      if (Array.isArray(parsed.habits)) return true;
+    } catch (e) { /* skip unreadable entry */ }
+  }
+  return false;
+}
+
 function loadMonth() {
+  pendingDuplicate = null;
   try {
     const raw = localStorage.getItem(monthKey(state.year, state.monthIdx));
     const parsed = raw ? JSON.parse(raw) : {};
     state.checks = parsed.checks || {};
     state.dayTasks = parsed.dayTasks || {};
+    state.monthGoals = parsed.monthGoals || [];
+
+    if (Array.isArray(parsed.habits)) {
+      // This month already has its own habit list (even if empty) — use it as-is.
+      state.habits = parsed.habits;
+    } else {
+      // This month has never been initialized. Check for a one-time legacy migration first.
+      const legacyRaw = localStorage.getItem(HABITS_KEY);
+      if (legacyRaw && !anyMonthEverInitialized()) {
+        try {
+          state.habits = JSON.parse(legacyRaw);
+          saveMonth(); // persist immediately so this month is now "initialized" and won't re-migrate
+        } catch (e) {
+          state.habits = [];
+        }
+      } else {
+        state.habits = [];
+        pendingDuplicate = findMostRecentPriorMonthWithHabits(state.year, state.monthIdx);
+      }
+    }
   } catch (e) {
-    state.checks = {}; state.dayTasks = {};
+    state.checks = {}; state.dayTasks = {}; state.monthGoals = []; state.habits = []; pendingDuplicate = null;
   }
   selectedDay = null;
 }
 function saveMonth() {
   try {
     localStorage.setItem(monthKey(state.year, state.monthIdx), JSON.stringify({
-      checks: state.checks, dayTasks: state.dayTasks
+      checks: state.checks, dayTasks: state.dayTasks, monthGoals: state.monthGoals, habits: state.habits
     }));
     showStatus("");
     queueCloudSave();
   } catch (e) { showStatus("Couldn't save last change — storage may be full.", true); }
+}
+
+/* ---------- duplicate-prompt actions (My Habits section) ---------- */
+function acceptDuplicateHabits() {
+  if (!pendingDuplicate) return;
+  state.habits = pendingDuplicate.habits.map(h => ({ ...h }));
+  pendingDuplicate = null;
+  saveMonth();
+  renderAll();
+}
+function declineDuplicateHabits() {
+  pendingDuplicate = null;
+  state.habits = [];
+  saveMonth(); // marks this month as initialized-empty so the prompt won't reappear
+  renderAll();
 }
 function showStatus(msg, isError) {
   const el = document.getElementById("statusMsg");
@@ -234,11 +290,10 @@ function isPastOrToday(year, monthIdx, day) {
 }
 
 /* ---------- chart instances ---------- */
-let dailyChart, weeklyChart, overallChart;
+let dailyChart, overallChart;
 
 /* ===================== INIT ===================== */
 function init() {
-  state.habits = loadHabits();
   state.pendingTasks = loadPendingTasks();
   loadMonth();
   populateControlPanel();
@@ -278,6 +333,18 @@ function wireStaticEvents() {
   document.getElementById("newHabitInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addHabit(); } });
   document.getElementById("newHabitInput").addEventListener("input", e => autoGrow(e.target));
 
+  document.getElementById("dupYesBtn").addEventListener("click", acceptDuplicateHabits);
+  document.getElementById("dupNoBtn").addEventListener("click", declineDuplicateHabits);
+
+  document.getElementById("addGoalBtn").addEventListener("click", () => {
+    const form = document.getElementById("addGoalForm");
+    form.classList.toggle("hidden");
+    if (!form.classList.contains("hidden")) document.getElementById("newGoalInput").focus();
+  });
+  document.getElementById("confirmAddGoal").addEventListener("click", addGoal);
+  document.getElementById("newGoalInput").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addGoal(); } });
+  document.getElementById("newGoalInput").addEventListener("input", e => autoGrow(e.target));
+
   document.getElementById("exportBtn").addEventListener("click", exportData);
   document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
   document.getElementById("importFile").addEventListener("change", importData);
@@ -308,7 +375,7 @@ function addHabit() {
   if (!name) return;
   const color = PALETTE[state.habits.length % PALETTE.length];
   state.habits.push({ id: "h" + Date.now(), name, emoji: "", color });
-  saveHabits();
+  saveMonth();
   input.value = "";
   input.style.height = "auto";
   document.getElementById("addHabitForm").classList.add("hidden");
@@ -317,7 +384,7 @@ function addHabit() {
 
 function removeHabit(id) {
   state.habits = state.habits.filter(h => h.id !== id);
-  saveHabits();
+  saveMonth();
   renderAll();
 }
 
@@ -331,7 +398,7 @@ function commitEditHabit(id, newName) {
   const h = state.habits.find(h => h.id === id);
   if (h && trimmed) h.name = trimmed;
   editingHabitId = null;
-  saveHabits();
+  saveMonth();
   renderAll();
 }
 
@@ -347,8 +414,132 @@ function reorderHabits(draggedId, targetId) {
   if (fromIdx === -1 || toIdx === -1) return;
   const [moved] = state.habits.splice(fromIdx, 1);
   state.habits.splice(toIdx, 0, moved);
-  saveHabits();
+  saveMonth();
   renderAll();
+}
+
+/* ===================== MONTH GOALS (scoped to the currently viewed month only) ===================== */
+function addGoal() {
+  const input = document.getElementById("newGoalInput");
+  const name = input.value.trim();
+  if (!name) return;
+  state.monthGoals.push({ id: "g" + Date.now(), name, completed: false });
+  saveMonth();
+  input.value = "";
+  input.style.height = "auto";
+  document.getElementById("addGoalForm").classList.add("hidden");
+  renderMonthGoals();
+}
+
+function removeGoal(id) {
+  state.monthGoals = state.monthGoals.filter(g => g.id !== id);
+  saveMonth();
+  renderMonthGoals();
+}
+
+function startEditGoal(id) {
+  editingGoalId = id;
+  renderMonthGoals();
+}
+
+function commitEditGoal(id, newName) {
+  const trimmed = newName.trim();
+  const g = state.monthGoals.find(g => g.id === id);
+  if (g && trimmed) g.name = trimmed;
+  editingGoalId = null;
+  saveMonth();
+  renderMonthGoals();
+}
+
+function cancelEditGoal() {
+  editingGoalId = null;
+  renderMonthGoals();
+}
+
+function toggleGoalComplete(id) {
+  const g = state.monthGoals.find(g => g.id === id);
+  if (g) g.completed = !g.completed;
+  saveMonth();
+  renderMonthGoals();
+}
+
+function reorderGoals(draggedId, targetId) {
+  if (draggedId === targetId) return;
+  const fromIdx = state.monthGoals.findIndex(g => g.id === draggedId);
+  const toIdx = state.monthGoals.findIndex(g => g.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = state.monthGoals.splice(fromIdx, 1);
+  state.monthGoals.splice(toIdx, 0, moved);
+  saveMonth();
+  renderMonthGoals();
+}
+
+function renderMonthGoals() {
+  document.getElementById("goalsTitle").textContent = `${MONTH_NAMES[state.monthIdx]} Goals`;
+  const container = document.getElementById("goalsList");
+  container.innerHTML = "";
+
+  state.monthGoals.forEach(g => {
+    const row = document.createElement("div");
+    row.className = "task-row";
+    row.draggable = true;
+    row.dataset.goalId = g.id;
+    const checked = !!g.completed;
+    const isEditing = editingGoalId === g.id;
+
+    row.innerHTML = `
+      <span class="task-drag-handle" title="Drag to reorder">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+      </span>
+      <span class="task-checkbox ${checked ? "checked" : ""}" data-role="checkbox">${checked ? "✓" : ""}</span>
+      ${isEditing
+        ? `<textarea class="task-name-input grow-input" id="goalEditInput-${g.id}" rows="1">${escapeHtml(g.name)}</textarea>`
+        : `<span class="task-name ${checked ? "checked-text" : ""}">${escapeHtml(g.name)}</span>`
+      }
+      <span class="task-actions${isEditing ? " force-visible" : ""}">
+        ${isEditing
+          ? `<button data-action="save" title="Save"><svg viewBox="0 0 24 24" fill="none" stroke="#6BCB77" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
+             <button data-action="cancel" title="Cancel"><svg viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`
+          : `<button data-action="edit" title="Edit goal"><svg viewBox="0 0 24 24" fill="none" stroke="#4D96FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+             <button data-action="delete" title="Delete goal"><svg viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`
+        }
+      </span>`;
+
+    row.querySelector('[data-role="checkbox"]').addEventListener("click", () => toggleGoalComplete(g.id));
+    row.querySelector('[data-action="edit"]')?.addEventListener("click", () => startEditGoal(g.id));
+    row.querySelector('[data-action="delete"]')?.addEventListener("click", () => removeGoal(g.id));
+    row.querySelector('[data-action="save"]')?.addEventListener("click", () => {
+      const inp = document.getElementById(`goalEditInput-${g.id}`);
+      commitEditGoal(g.id, inp.value);
+    });
+    row.querySelector('[data-action="cancel"]')?.addEventListener("click", cancelEditGoal);
+    const editInput = document.getElementById(`goalEditInput-${g.id}`);
+    if (editInput) {
+      editInput.addEventListener("keydown", e => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEditGoal(g.id, editInput.value); }
+        if (e.key === "Escape") cancelEditGoal();
+      });
+      editInput.addEventListener("input", () => autoGrow(editInput));
+      autoGrow(editInput);
+      setTimeout(() => { editInput.focus(); editInput.setSelectionRange(editInput.value.length, editInput.value.length); }, 0);
+    }
+
+    row.addEventListener("dragstart", () => { dragGoalId = g.id; row.classList.add("dragging"); });
+    row.addEventListener("dragend", () => {
+      row.classList.remove("dragging");
+      document.querySelectorAll("#goalsList .task-row").forEach(r => r.classList.remove("drop-target"));
+    });
+    row.addEventListener("dragover", e => { e.preventDefault(); row.classList.add("drop-target"); });
+    row.addEventListener("dragleave", () => row.classList.remove("drop-target"));
+    row.addEventListener("drop", e => {
+      e.preventDefault();
+      row.classList.remove("drop-target");
+      if (dragGoalId) reorderGoals(dragGoalId, g.id);
+      dragGoalId = null;
+    });
+
+    container.appendChild(row);
+  });
 }
 
 /* ===================== TASK CRUD (each day has its OWN task list, auto-saved) ===================== */
@@ -439,7 +630,7 @@ function toggleCheck(habitId, day) {
 
 /* ===================== EXPORT / IMPORT ===================== */
 function exportData() {
-  const data = { habits: state.habits, pendingTasks: state.pendingTasks, months: {} };
+  const data = { pendingTasks: state.pendingTasks, months: {} };
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (key && key.startsWith(STORAGE_PREFIX + "month:")) {
@@ -465,10 +656,6 @@ function importData(e) {
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      if (Array.isArray(data.habits)) {
-        state.habits = data.habits;
-        localStorage.setItem(HABITS_KEY, JSON.stringify(state.habits));
-      }
       if (Array.isArray(data.pendingTasks)) {
         state.pendingTasks = data.pendingTasks;
         localStorage.setItem(PENDING_KEY, JSON.stringify(state.pendingTasks));
@@ -515,23 +702,6 @@ function computeDailyProgress() {
     return { day: d, pct };
   });
 }
-function computeWeeklyProgress() {
-  const nDays = daysInMonth(state.year, state.monthIdx);
-  const weeks = [];
-  for (let start = 1; start <= nDays; start += 7) {
-    const end = Math.min(start + 6, nDays);
-    const weekDays = [];
-    for (let d = start; d <= end; d++) weekDays.push(d);
-    const relevant = weekDays.filter(d => isPastOrToday(state.year, state.monthIdx, d));
-    const possible = state.habits.length * relevant.length;
-    const done = relevant.reduce((sum, d) => {
-      const dayChecks = state.checks[String(d)] || {};
-      return sum + state.habits.filter(h => dayChecks[h.id]).length;
-    }, 0);
-    weeks.push({ week: `W${weeks.length + 1}`, pct: possible > 0 ? Math.round((done / possible) * 100) : 0 });
-  }
-  return weeks;
-}
 function computeHabitAnalysis() {
   const tracked = getTrackedDays();
   return state.habits.map(h => {
@@ -558,8 +728,8 @@ function renderAll() {
   renderStreak();
   renderStats();
   renderDailyChart();
-  renderWeeklyChart();
-  renderHabitTable();
+  renderHabitsSection();
+  renderMonthGoals();
   renderPendingTasks();
   renderDayStrip();
   renderTaskPanel();
@@ -614,28 +784,23 @@ function renderDailyChart() {
   }
 }
 
-function renderWeeklyChart() {
-  const data = computeWeeklyProgress();
-  const colors = ["#FF6B6B", "#4ECDC4", "#FFD93D", "#B085F5", "#6BCB77"];
-  const ctx = document.getElementById("weeklyChart");
-  const chartData = {
-    labels: data.map(d => d.week),
-    datasets: [{ data: data.map(d => d.pct), backgroundColor: data.map((_, i) => colors[i % colors.length]), borderRadius: 6 }]
-  };
-  if (weeklyChart) { weeklyChart.data = chartData; weeklyChart.update(); }
-  else {
-    weeklyChart = new Chart(ctx, {
-      type: "bar",
-      data: chartData,
-      options: {
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.parsed.y + "%" } } },
-        scales: {
-          x: { ticks: { color: "#8577B3", font: { size: 10 } }, grid: { display: false } },
-          y: { display: false, min: 0, max: 100 }
-        }
-      }
-    });
+/* ---------- My Habits section: duplicate-prompt gate vs normal grid ---------- */
+function renderHabitsSection() {
+  const promptEl = document.getElementById("duplicatePrompt");
+  const normalEl = document.getElementById("habitsNormalView");
+  const addBtn = document.getElementById("addHabitBtn");
+
+  if (pendingDuplicate) {
+    document.getElementById("dupMonthLabel").textContent = `${MONTH_NAMES[state.monthIdx]} ${state.year}`;
+    document.getElementById("dupSourceLabel").textContent = pendingDuplicate.label;
+    promptEl.classList.remove("hidden");
+    normalEl.classList.add("hidden");
+    addBtn.classList.add("hidden");
+  } else {
+    promptEl.classList.add("hidden");
+    normalEl.classList.remove("hidden");
+    addBtn.classList.remove("hidden");
+    renderHabitTable();
   }
 }
 
@@ -668,7 +833,7 @@ function renderHabitTable() {
           ? `<textarea class="habit-name-input grow-input" id="editInput-${h.id}" rows="1">${escapeHtml(h.name)}</textarea>`
           : `<span class="habit-name-text">${escapeHtml(h.name)}</span>`
         }
-        <span class="habit-actions">
+        <span class="habit-actions${isEditing ? " force-visible" : ""}">
           ${isEditing
             ? `<button data-action="save" title="Save"><svg viewBox="0 0 24 24" fill="none" stroke="#6BCB77" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
                <button data-action="cancel" title="Cancel"><svg viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`
@@ -814,7 +979,7 @@ function renderPendingTasks() {
         ? `<textarea class="task-name-input grow-input" id="pendingEditInput-${p.id}" rows="1">${escapeHtml(p.name)}</textarea>`
         : `<span class="task-name ${checked ? "checked-text" : ""}">${escapeHtml(p.name)}</span>`
       }
-      <span class="task-actions">
+      <span class="task-actions${isEditing ? " force-visible" : ""}">
         ${isEditing
           ? `<button data-action="save" title="Save"><svg viewBox="0 0 24 24" fill="none" stroke="#6BCB77" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
              <button data-action="cancel" title="Cancel"><svg viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`
@@ -942,7 +1107,7 @@ function renderTaskPanel() {
         ? `<textarea class="task-name-input grow-input" id="taskEditInput-${t.id}" rows="1">${escapeHtml(t.name)}</textarea>`
         : `<span class="task-name ${checked ? "checked-text" : ""}">${escapeHtml(t.name)}</span>`
       }
-      <span class="task-actions">
+      <span class="task-actions${isEditing ? " force-visible" : ""}">
         ${isEditing
           ? `<button data-action="save" title="Save"><svg viewBox="0 0 24 24" fill="none" stroke="#6BCB77" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>
              <button data-action="cancel" title="Cancel"><svg viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>`
