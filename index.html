@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Habit Quest — Colorful Habit Tracker Dashboard</title>
+<title>YASH LIFE TRACKER — Colorful Habit Tracker Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -16,7 +16,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="sparkle">✨</span>
-      <h1>Habit Quest Dashboard</h1>
+      <h1>YASH LIFE TRACKER</h1>
     </div>
     <div class="topbar-actions">
       <button id="syncBtn" class="sync-btn" title="Sign in to sync across devices">
@@ -56,12 +56,6 @@
       <div class="chart-box" style="height:118px"><canvas id="dailyChart"></canvas></div>
     </section>
 
-    <!-- Weekly Progress -->
-    <section class="dq-card" style="grid-area:weekly">
-      <p class="dq-title">Weekly Progress</p>
-      <div class="chart-box" style="height:118px"><canvas id="weeklyChart"></canvas></div>
-    </section>
-
     <!-- Overall Stats -->
     <section class="dq-card" style="grid-area:stats">
       <p class="dq-title">Overall Stats</p>
@@ -76,24 +70,52 @@
       </div>
     </section>
 
+    <!-- Month Goals (scoped to the currently viewed month only) -->
+    <section class="dq-card" style="grid-area:goals">
+      <div class="row-between">
+        <p class="dq-title" id="goalsTitle" style="margin:0">Goals</p>
+        <button id="addGoalBtn" class="pill-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Goal
+        </button>
+      </div>
+      <div id="addGoalForm" class="add-form hidden">
+        <textarea id="newGoalInput" class="grow-input" rows="1" placeholder="New goal" maxlength="60"></textarea>
+        <button id="confirmAddGoal">Add</button>
+      </div>
+      <div id="goalsList" class="task-list" style="max-height:220px"></div>
+    </section>
+
     <!-- My Habits -->
     <section class="dq-card" style="grid-area:habits">
       <div class="row-between">
         <p class="dq-title" style="margin:0">My Habits</p>
-        <button id="addHabitBtn" class="pill-btn">
+        <button id="addHabitBtn" class="pill-btn hidden">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add habit
         </button>
       </div>
-      <div id="addHabitForm" class="add-form hidden">
-        <textarea id="newHabitInput" class="grow-input" rows="1" placeholder="New habit name" maxlength="60"></textarea>
-        <button id="confirmAddHabit">Add</button>
+
+      <!-- Shown only when this month has no habit list yet AND an earlier month does -->
+      <div id="duplicatePrompt" class="duplicate-prompt hidden">
+        <p>No habits yet for <b id="dupMonthLabel"></b>. Duplicate <b id="dupSourceLabel"></b>'s habits?</p>
+        <div class="duplicate-actions">
+          <button id="dupYesBtn" class="pill-btn">Duplicate</button>
+          <button id="dupNoBtn" class="modal-btn">Start empty</button>
+        </div>
       </div>
-      <div class="table-scroll">
-        <table id="habitTable">
-          <thead><tr id="habitTableHead"></tr></thead>
-          <tbody id="habitTableBody"></tbody>
-        </table>
+
+      <div id="habitsNormalView">
+        <div id="addHabitForm" class="add-form hidden">
+          <textarea id="newHabitInput" class="grow-input" rows="1" placeholder="New habit name" maxlength="60"></textarea>
+          <button id="confirmAddHabit">Add</button>
+        </div>
+        <div class="table-scroll">
+          <table id="habitTable">
+            <thead><tr id="habitTableHead"></tr></thead>
+            <tbody id="habitTableBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
