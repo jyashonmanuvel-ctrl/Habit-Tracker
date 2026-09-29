@@ -94,10 +94,10 @@ h1, .dq-title, .fq-display {
 .dq-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: 1fr 1.3fr 1.3fr 1fr;
+  grid-template-columns: 1fr 1.3fr 1fr 1.3fr;
   grid-template-areas:
-    "control daily   weekly   stats"
-    "habits  habits  habits   analysis"
+    "control daily   stats   goals"
+    "habits  habits  habits  analysis"
     "daystrip daystrip daystrip taskpanel";
 }
 @media (max-width: 900px) {
@@ -106,7 +106,7 @@ h1, .dq-title, .fq-display {
     grid-template-areas:
       "control stats"
       "daily daily"
-      "weekly weekly"
+      "goals goals"
       "habits habits"
       "analysis analysis"
       "daystrip daystrip"
@@ -297,12 +297,20 @@ thead th.day-head-today {
   line-height: 1.4;
 }
 
-.habit-actions { display: flex; gap: 3px; margin-left: 2px; }
+.habit-actions {
+  display: flex;
+  gap: 3px;
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.habit-row:hover .habit-actions,
+.habit-actions.force-visible { opacity: 1; }
 .habit-actions button {
   background: none;
   border: none;
   cursor: pointer;
-  opacity: 0.55;
+  opacity: 0.7;
   padding: 0;
   display: flex;
 }
@@ -335,6 +343,17 @@ thead th.day-head-today {
 
 .status-msg { font-size: 11px; color: #9C90C7; margin-top: 10px; min-height: 14px; }
 .status-msg.error { color: #FF6B6B; }
+
+/* ---------- Duplicate-habits prompt (My Habits section) ---------- */
+.duplicate-prompt {
+  background: rgba(255,217,61,0.08);
+  border: 1px solid rgba(255,217,61,0.35);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+}
+.duplicate-prompt p { font-size: 12px; color: #F4F0FF; margin: 0 0 10px 0; line-height: 1.5; }
+.duplicate-actions { display: flex; justify-content: center; gap: 8px; }
 /* ---------- Auth modal ---------- */
 .modal-overlay {
   position: fixed; inset: 0;
@@ -502,8 +521,17 @@ thead th.day-head-today {
   font-size: 12px;
   padding: 2px 6px;
 }
-.task-actions { display: flex; gap: 3px; flex-shrink: 0; margin-top: 1px; }
-.task-actions button { background: none; border: none; cursor: pointer; opacity: 0.55; padding: 0; display: flex; }
+.task-actions {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.task-row:hover .task-actions,
+.task-actions.force-visible { opacity: 1; }
+.task-actions button { background: none; border: none; cursor: pointer; opacity: 0.7; padding: 0; display: flex; }
 .task-actions button:hover { opacity: 1; }
 .task-actions svg { width: 13px; height: 13px; }
 .task-drag-handle { width: 12px; display: flex; align-items: center; cursor: grab; opacity: 0.4; color: #8577B3; flex-shrink: 0; margin-top: 3px; }
